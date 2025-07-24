@@ -7,25 +7,45 @@ import { loginSchema, signupSchema, type LoginData, type SignupData, type User }
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl: sessionTtl,
-    tableName: "sessions",
-  });
-  return session({
-    secret: process.env.SESSION_SECRET || "default-dev-secret-please-change-in-production",
-    store: sessionStore,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production" || process.env.VERCEL === "1",
-      maxAge: sessionTtl,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    },
-  });
+  
+  // Use memory store for Vercel serverless, PostgreSQL store for local development
+  const isVercel = process.env.VERCEL === "1";
+  
+  if (isVercel) {
+    // Memory store for Vercel serverless functions
+    return session({
+      secret: process.env.SESSION_SECRET || "default-dev-secret-please-change-in-production",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: true,
+        maxAge: sessionTtl,
+        sameSite: "none",
+      },
+    });
+  } else {
+    // PostgreSQL store for local development
+    const pgStore = connectPg(session);
+    const sessionStore = new pgStore({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: false,
+      ttl: sessionTtl,
+      tableName: "sessions",
+    });
+    return session({
+      secret: process.env.SESSION_SECRET || "default-dev-secret-please-change-in-production",
+      store: sessionStore,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: false,
+        maxAge: sessionTtl,
+        sameSite: "lax",
+      },
+    });
+  }
 }
 
 export async function setupAuth(app: Express) {
